@@ -3,14 +3,23 @@
 
 #ifdef ARDUINO
 #include "Arduino.h"
-#else
+#elif defined(ESP_PLATFORM)
 #include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
+#include <esp_log.h>
+#include <esp_heap_caps.h>
+#else
+// Works with FreeRTOS-Kernel “single header directory” layout
+#include <FreeRTOS.h>
+#include <task.h>
+#include <semphr.h>
+#endif
+
 #include <string.h>
 #include <string>
 #include <cstdint>
-#include <math.h>
-#include <esp_log.h>
-#include <esp_heap_caps.h>
+#include <cmath>
 
 using namespace std;
 
@@ -26,7 +35,6 @@ using namespace std;
 #ifndef SPI_MISO
 #define SPI_MISO 11
 #endif
-
 
 #define LOW (0x0)
 #define HIGH (0x1)
@@ -45,8 +53,8 @@ long random(long howsmall, long howbig);
 
 size_t getFreeHeap();
 
-extern const char* LM_TAG;
-extern const char* LM_VERSION;
+extern const char *LM_TAG;
+extern const char *LM_VERSION;
 
 // LoRa band definition
 // 433E6 for Asia
@@ -60,7 +68,7 @@ extern const char* LM_VERSION;
 #define LM_POWER 6
 #define LM_DUTY_CYCLE 100
 
-//Syncronization Word that identifies the mesh network
+// Syncronization Word that identifies the mesh network
 #define LM_SYNC_WORD 19U
 
 // Comment this line if you want to remove the crc for each packet
@@ -69,44 +77,65 @@ extern const char* LM_VERSION;
 // Routing table max size
 #define RTMAXSIZE 256
 
-//MAX packet size per packet in bytes. It could be changed between 13 and 255 bytes. Recommended 100 or less bytes.
-//If exceed it will be automatically separated through multiple packets 
-//In bytes (226 bytes [UE max allowed with SF7 and 125khz])
-//MAX payload size for hello packets = LM_MAX_PACKET_SIZE - 7 bytes of header
-//MAX payload size for data packets = LM_MAX_PACKET_SIZE - 7 bytes of header - 2 bytes of via
-//MAX payload size for reliable and large packets = LM_MAX_PACKET_SIZE - 7 bytes of header - 2 bytes of via - 3 of control packet
+// MAX packet size per packet in bytes. It could be changed between 13 and 255 bytes. Recommended 100 or less bytes.
+// If exceed it will be automatically separated through multiple packets
+// In bytes (226 bytes [UE max allowed with SF7 and 125khz])
+// MAX payload size for hello packets = LM_MAX_PACKET_SIZE - 7 bytes of header
+// MAX payload size for data packets = LM_MAX_PACKET_SIZE - 7 bytes of header - 2 bytes of via
+// MAX payload size for reliable and large packets = LM_MAX_PACKET_SIZE - 7 bytes of header - 2 bytes of via - 3 of control packet
 #define LM_MAX_PACKET_SIZE 100
 
 // Packet types
 #define NEED_ACK_P 0b00000011
-#define DATA_P     0b00000010
-#define HELLO_P    0b00000100
-#define ACK_P      0b00001010
-#define XL_DATA_P  0b00010010
-#define LOST_P     0b00100010
-#define SYNC_P     0b01000010
+#define DATA_P 0b00000010
+#define HELLO_P 0b00000100
+#define ACK_P 0b00001010
+#define XL_DATA_P 0b00010010
+#define LOST_P 0b00100010
+#define SYNC_P 0b01000010
 
 // Packet configuration
 #define BROADCAST_ADDR 0xFFFF
 #define DEFAULT_PRIORITY 20
 #define MAX_PRIORITY 40
 
-//Definition Times in seconds
+// Definition Times in seconds
 #define HELLO_PACKETS_DELAY 120
-#define DEFAULT_TIMEOUT HELLO_PACKETS_DELAY*5
+#define DEFAULT_TIMEOUT HELLO_PACKETS_DELAY * 5
 #define MIN_TIMEOUT 20
 
-//Maximum times that a sequence of packets reach the timeout
+// Maximum times that a sequence of packets reach the timeout
 #define MAX_TIMEOUTS 10
 #define MAX_RESEND_PACKET 3
 #define MAX_TRY_BEFORE_SEND 5
 
-//Role Types
+// Role Types
 #define ROLE_DEFAULT 0b00000000
 #define ROLE_GATEWAY 0b00000001
-//Free Role Types from 0b00000010 to 0b10000000
+// Free Role Types from 0b00000010 to 0b10000000
 
 // Define if is testing
 // #define LM_TESTING
+
+#ifndef ESP_PLATFORM // any non-ESP target (Pico, STM32, …)
+
+#include <stdio.h>
+
+#define ESP_LOGE(tag, fmt, ...) ((void)0)
+#define ESP_LOGW(tag, fmt, ...) ((void)0)
+#define ESP_LOGI(tag, fmt, ...) ((void)0)
+#define ESP_LOGV(tag, fmt, ...) ((void)0)
+
+#include "PicoHal.h"
+#define EspHal PicoHal
+
+#ifdef portYIELD_FROM_ISR
+  #undef  portYIELD_FROM_ISR
+#endif
+#define portYIELD_FROM_ISR()  portEND_SWITCHING_ISR( pdTRUE )
+
+#ifndef INCLUDE_uxTaskGetStackHighWaterMark
+#define INCLUDE_uxTaskGetStackHighWaterMark 1
+#endif
 
 #endif
